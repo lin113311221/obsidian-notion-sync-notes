@@ -1,48 +1,32 @@
-# obsidian-notion-sync-notes
+# Obsidian / Notion 同步工程笔记
 
-把小红书 / B站 的收藏同步进 **Obsidian** 和 **Notion** —— 一个真实上线产品在集成过程中踩过的坑。
+整理自 Savault 开发过程的历史工程笔记，记录收藏同步、适配层、笔记落盘、检索和测试的设计取舍。本仓是文档资料，不是可安装插件、SDK 或运行时源码。
 
-这不是教程，也不是 SDK。是**工程笔记**：哪些做法跑通了、哪些是死路、哪些坑藏得很深。
+产品与安装入口见 [Savault 插件发布仓](https://github.com/lin113311221/savault-plugin) 和 [Savault Skill](https://github.com/lin113311221/savault-skills)。协作接手见 [agentconversation.md](agentconversation.md)。
 
-代码来自 [知识桥梁 Knowledge Bridge](https://github.com/lin113311221/bili2obsidian-plugin)（Obsidian 插件，2 平台 × 2 终点）。
-笔记刻意抽掉了业务代码，只留**可复用的判断和边界条件**。
+## 阅读顺序
 
----
-
-## 目录
-
-| 文档 | 解决什么问题 |
+| 文档 | 关注点 |
 |---|---|
-| [01-architecture.md](docs/01-architecture.md) | 4 平台 × 2 终点怎么共用一份引擎，加平台不改核心 |
-| [02-xiaohongshu.md](docs/02-xiaohongshu.md) | 小红书有前端签名风控，怎么绕开而不是硬啃 |
-| [03-bilibili.md](docs/03-bilibili.md) | B站 SESSDATA、收藏夹接口、AI 字幕要登录态 |
-| [04-obsidian.md](docs/04-obsidian.md) | frontmatter 规范、双链、让笔记进图谱而不是变孤点 |
-| [05-notion.md](docs/05-notion.md) | Notion API 的 `database_id` ≠ `data_source_id`、2000 字符陷阱 |
-| [06-testing.md](docs/06-testing.md) | Obsidian 插件怎么测（`require('obsidian')` 进不了 Node 测试套件） |
-| [07-rag.md](docs/07-rag.md) | 给笔记库做检索：为什么选 BM25 而不是 embedding |
+| [01-architecture.md](docs/01-architecture.md) | 多平台、多目标的共享引擎与适配器 |
+| [02-xiaohongshu.md](docs/02-xiaohongshu.md) | 小红书集成的会话、页面响应与变化边界 |
+| [03-bilibili.md](docs/03-bilibili.md) | B站收藏接口、字幕与登录态 |
+| [04-obsidian.md](docs/04-obsidian.md) | Markdown、frontmatter、双链与图谱 |
+| [05-notion.md](docs/05-notion.md) | Notion 标识、结构及字段限制 |
+| [06-testing.md](docs/06-testing.md) | 可测试边界、真实适配器接线与回归 |
+| [07-rag.md](docs/07-rag.md) | 本地笔记检索与 BM25 / 向量检索的取舍 |
 
----
+先读架构和测试，再按任务读平台或目标章节。文中的平台数量、API 限制、模型能力和测试数字对应写作时的实现；实际采用前要对照当前代码与官方资料核验，不作为今天的产品承诺。
 
-## 几条贯穿全文的判断
+## 如何使用与贡献
 
-这几条比具体代码值钱：
+- 不需要安装依赖。本仓没有 package.json、构建或 npm 测试入口。
+- 优先复用设计方法：共享引擎与适配器分离、把关键接线放入可测试层、针对真实回归检查测试盲区。
+- 不把一种会话或页面集成方法描述成永久不受平台变化影响；接口、权限、结构和风控都可能变化。
+- 检索方案应按用户已有服务、数据规模与实际检索结果选择；旧服务商能力描述需要重新确认。
+- 修改笔记时补充适用版本、来源、边界及可复现示例；示例使用合成数据，不含凭据或私人笔记。
+- 提交前运行 `git diff --check`，检查相对链接、代码块与引用；默认分支 `master` 的变更通过 PR 审核。
 
-1. **不要跟平台的前端签名硬碰硬。** 算法一改，全线崩溃。改用内嵌平台自己的页面、监听它自己的请求响应——签名怎么变都不影响你（[02](docs/02-xiaohongshu.md)）。
-2. **依赖缺失就当场炸掉，不要写兜底三元。** 我们有一个 bug 藏了很久：`normalizePath` 从 `model` 导入但 `model` 从未导出，防御性三元 `normalizePath ? ... : 兜底` 永远走兜底，功能实际从未生效，而测试全绿（[06](docs/06-testing.md)）。
-3. **接线（wiring）写在不可测的层里 = 永远测不到。** 「提取过滤条件 → 传给检索」这行写在 `plugin/main.js`，因为 `require('obsidian')` 进不了测试，写漏了没人发现。**解法不是给不可测的层补测试，是把接线收进可测的层**（[06](docs/06-testing.md)）。
-4. **测试全绿不等于没坏。** 用变异测试验证：故意注入真实回归，测试仍全绿 = 有盲区（[06](docs/06-testing.md)）。
-5. **embedding 不总是更好的选择。** 最常用的 DeepSeek **根本没有 `/embeddings` 端点**。强依赖它等于让这批用户跑不起来（[07](docs/07-rag.md)）。
+## 许可
 
----
-
-## 谁该读
-
-- 在做「把外部内容搬进笔记软件」的开发者
-- 被小红书 / B站 接口签名卡住的人
-- 想给 Obsidian 插件写自动化测试的人
-- 在纠结 RAG 用 BM25 还是向量检索的人
-
-## License
-
-MIT。文档可以自由使用，能帮到你就够了 —— 如果省了你几天时间，去给
-[插件仓库](https://github.com/lin113311221/bili2obsidian-plugin) 点个 star 就行。
+[MIT](LICENSE) 覆盖本仓文档。它不改变 Savault 私有实现、专有运行包或第三方服务的授权条件。
